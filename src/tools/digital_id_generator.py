@@ -140,32 +140,30 @@ def generate_digital_id_card(
     w, h = img.size
     draw = ImageDraw.Draw(img)
     
-    # ========== 2. 添加文字信息 ==========
-    right_x = int(w * 0.43)
-    margin_x = int(w * 0.04)
+    # ========== 2. 添加文字信息（电子名片内部区域） ==========
+    right_x = int(w * 0.42)
+    margin_right = int(w * 0.05)
     
-    # 字体大小
-    label_size = int(h * 0.032)
-    value_name_size = int(h * 0.075)
-    value_size = int(h * 0.045)
-    decor_size = int(h * 0.020)
-    title_size = int(h * 0.038)
+    # 字体大小（整体调小，确保在名片范围内）
+    label_size = int(h * 0.026)
+    value_name_size = int(h * 0.060)
+    value_size = int(h * 0.036)
+    decor_size = int(h * 0.018)
     
     label_font = find_font(label_size)
     name_font = find_font(value_name_size)
     value_font = find_font(value_size)
     decor_font = find_font(decor_size)
-    title_font = find_font(title_size)
-    msg_title_font = find_font(int(h * 0.028))
-    msg_font = find_font(int(h * 0.032))
+    msg_title_font = find_font(int(h * 0.024))
+    msg_font = find_font(int(h * 0.028))
     
-    # 顶部装饰文字
-    draw.text((w - int(w*0.22), int(h*0.05)), "SYSTEM ONLINE · NEW STUDENT · 2026", 
+    # 顶部装饰文字（名片内部右上角）
+    draw.text((w - int(w*0.25), int(h*0.10)), "SYSTEM ONLINE · 2026", 
               font=decor_font, fill=(0, 255, 255, 150))
     
-    # 右侧信息列表
-    info_start_y = int(h * 0.18)
-    line_gap = int(h * 0.095)
+    # 右侧信息列表（上移，紧凑排布，放在电子名片玻璃区域内）
+    info_start_y = int(h * 0.15)
+    line_gap = int(h * 0.078)
     
     info_items = [
         ("NAME", name_pinyin, True),
@@ -179,30 +177,30 @@ def generate_digital_id_card(
         y = info_start_y + i * line_gap
         # 标签（青色小字）
         draw.text((right_x, y), label, font=label_font, fill=(0, 255, 255, 210))
-        # 值（白色发光大字，NAME最醒目）
+        # 值（白色发光字，NAME最醒目但大小合适）
         f = name_font if is_name else value_font
-        glow_r = 4 if is_name else 2
+        glow_r = 3 if is_name else 1
         glow_c = (255, 0, 255, 70) if is_name else (0, 255, 255, 60)
         draw_text_with_glow(
-            draw, (right_x, y + int(h*0.035)), value, f,
+            draw, (right_x, y + int(h*0.028)), value, f,
             fill=(255, 255, 255, 250),
             glow_color=glow_c,
             glow_radius=glow_r
         )
     
-    # 分割线
-    line_y = int(h * 0.73)
-    draw.line([(right_x, line_y), (w - margin_x, line_y)], fill=(0, 255, 255, 120), width=1)
+    # 分割线（信息和寄语之间）
+    line_y = info_start_y + len(info_items) * line_gap - int(h*0.015)
+    draw.line([(right_x, line_y), (w - margin_right, line_y)], fill=(0, 255, 255, 120), width=1)
     
-    # ========== 3. 底部寄语区域 ==========
-    msg_y = line_y + int(h * 0.03)
+    # ========== 3. 底部寄语区域（紧凑，控制长度在15字内单行展示） ==========
+    msg_y = line_y + int(h * 0.02)
     draw.text((right_x, msg_y), "MESSAGE TO MYSELF", font=msg_title_font, fill=(255, 0, 255, 210))
     
     # 自动换行处理英文寄语
     words = message_en.split()
     lines = []
     current_line = ""
-    max_width = w - right_x - margin_x
+    max_width = w - right_x - margin_right
     for word in words:
         test = current_line + (" " if current_line else "") + word
         bbox = draw.textbbox((0, 0), test, font=msg_font)
@@ -214,14 +212,14 @@ def generate_digital_id_card(
     if current_line:
         lines.append(current_line)
     
-    msg_text_y = msg_y + int(h * 0.04)
-    line_height = int(h * 0.040)
-    for i, line in enumerate(lines[:3]):  # 最多3行
+    msg_text_y = msg_y + int(h * 0.032)
+    line_height = int(h * 0.034)
+    for i, line in enumerate(lines[:2]):  # 最多2行，寄语控制在15字内基本单行
         draw.text((right_x, msg_text_y + i * line_height), line, font=msg_font, fill=(255, 240, 255, 230))
     
-    # 底部装饰
-    scan_y = h - int(h*0.04)
-    draw.text((margin_x, scan_y), "◉ SCAN  ▣ IDENTITY VERIFIED  ◈ NEW JOURNEY BEGINS", 
+    # 底部装饰文字（名片内底部）
+    scan_y = h - int(h*0.07)
+    draw.text((right_x, scan_y), "◉ SCAN  ▣ ID VERIFIED  ◈ NEW JOURNEY", 
               font=decor_font, fill=(0, 255, 255, 130))
     
     # ========== 4. 保存并上传 ==========
