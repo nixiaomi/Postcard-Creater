@@ -30,13 +30,12 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="华师明信片制作智能体", description="华南师范大学AI明信片生成器")
 
-# 确保静态目录存在
+# 路径配置（只读文件系统，不创建目录）
 static_dir = BASE_DIR / "static"
-static_dir.mkdir(exist_ok=True)
 templates_dir = BASE_DIR / "templates"
 
 templates = Jinja2Templates(directory=str(templates_dir))
-# 静态文件由main.py统一挂载，这里不重复mount避免冲突
+# 静态文件由main.py挂载，这里不重复挂载
 
 
 @app.get("/", response_class=HTMLResponse)

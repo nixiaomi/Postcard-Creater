@@ -21,12 +21,24 @@ storage = S3SyncStorage(
 
 # 背景图路径 - 使用可靠的路径定位
 def _get_background_path() -> str:
+    # 优先环境变量
     env_path = os.getenv("COZE_WORKSPACE_PATH")
+    candidates = []
     if env_path:
-        return os.path.join(env_path, "assets", "scnu_postcard_bg.png")
-    # 相对于当前文件位置: src/tools/postcard_generator.py -> ../../assets
+        candidates.append(os.path.join(env_path, "assets", "scnu_postcard_bg.png"))
+    # 相对于当前文件位置
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(current_dir, "..", "..", "assets", "scnu_postcard_bg.png")
+    candidates.append(os.path.normpath(os.path.join(current_dir, "..", "..", "assets", "scnu_postcard_bg.png")))
+    # 平台部署时的可能路径
+    candidates.append("/opt/bytefaas/assets/scnu_postcard_bg.png")
+    # 可写目录作为后备
+    candidates.append("/tmp/scnu_postcard_bg.png")
+    
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    # 默认返回第一个，让调用方判断
+    return candidates[0]
 
 # 背景图路径
 BACKGROUND_PATH = os.path.normpath(_get_background_path())
@@ -375,8 +387,21 @@ def generate_background_image(ctx=None) -> Image.Image:
     
     bg_img = Image.open(io.BytesIO(img_response.content)).convert("RGBA")
     
-    # 保存到本地
-    os.makedirs(os.path.dirname(BACKGROUND_PATH), exist_ok=True)
-    bg_img.convert("RGB").save(BACKGROUND_PATH, "PNG", quality=95)
+    # 保存到本地 - 优先保存到可写目录/tmp，避免只读文件系统问题
+    save_paths = [
+        BACKGROUND_PATH,
+        "/tmp/scnu_postcard_bg.png",
+    ]
+    for save_path in save_paths:
+        try:
+            save_dir = os.path.dirname(save_path)
+            if save_dir:
+                os.makedirs(save_dir, exist_ok=True)
+            bg_img.convert("RGB").save(save_path, "PNG", quality=95)
+            logger.info(f"Background saved to: {save_path}")
+            break
+        except (OSError, IOError) as e:
+            logger.warning(f"Cannot save to {save_path}: {e}")
+            continue
     
     return bg_img
