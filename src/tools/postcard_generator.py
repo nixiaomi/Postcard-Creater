@@ -99,17 +99,20 @@ def generate_character_image(
     client = ImageGenerationClient(ctx=ctx or new_context(method="generate_character"))
     
     # 构建prompt
-    gender_desc = "男生" if gender == "male" else "女生" if gender == "female" else "大学生"
+    gender_desc = "male college student boy" if gender == "male" else "female college student girl" if gender == "female" else "young college student"
+    outfit_desc = "casual modern youthful campus outfit, backpack, relaxed standing pose"
     
     if reference_image_url:
         # 有参考照片，生成基于照片的动漫/插画风格人物
         prompt = (
-            f"Convert this photo into a beautiful anime/illustration style character portrait. "
-            f"The character is a {gender_desc} university student named {name} who loves {hobby}. "
-            f"Style: warm, vibrant, youth campus style, soft lighting, detailed, high quality, "
-            f"full body or half body portrait, transparent background, pure white background, "
-            f"cheerful expression, modern college student outfit, South China Normal University vibe. "
-            f"The character should look energetic and hopeful for the new semester."
+            f"Convert this person photo into a beautiful anime/illustration style character portrait, "
+            f"preserving the person's facial features and likeness. "
+            f"The character is a {gender_desc} who loves {hobby}. "
+            f"{outfit_desc}, cheerful warm smile, energetic. "
+            f"IMPORTANT: The image MUST have a COMPLETELY WHITE BACKGROUND, no other elements, just the character. "
+            f"Style: clean anime illustration, vibrant warm colors, soft cel-shading, high quality, "
+            f"full body or 3/4 body shot, character centered in frame, suitable for placing on a postcard. "
+            f"White background only, no shadows on the background."
         )
         response = client.generate(
             prompt=prompt,
@@ -121,14 +124,12 @@ def generate_character_image(
     else:
         # 无参考照片，根据描述生成
         prompt = (
-            f"A beautiful anime/illustration style character portrait of a {gender_desc} university student. "
-            f"Name: {name}, Hobby: {hobby}. "
-            f"Style: warm, vibrant, youth campus style, soft lighting, detailed, high quality, "
-            f"full body or half body portrait, transparent background or pure white background, "
-            f"cheerful smiling expression, modern casual college outfit, backpack, "
-            f"energetic and hopeful feeling for new semester, "
-            f"standing pose, South China Normal University campus atmosphere, pink flowers and green trees in vibe. "
-            f"Make the character cute and appealing."
+            f"A beautiful anime/illustration style character portrait of a {gender_desc} university freshman, "
+            f"who loves {hobby}. {outfit_desc}, cheerful smiling expression, hopeful for new semester. "
+            f"IMPORTANT: The image MUST have a COMPLETELY WHITE BACKGROUND, pure white, no other scene elements, just the character standing alone. "
+            f"Style: clean anime illustration, soft warm lighting, vibrant colors, high quality, detailed, "
+            f"3/4 body or full body shot, character centered in frame, suitable for placing on a campus postcard. "
+            f"White background only, no props in background, no environment, just the character cutout ready for compositing."
         )
         response = client.generate(
             prompt=prompt,
@@ -223,29 +224,41 @@ def create_postcard(
 ) -> Tuple[str, str]:
     """
     创建华师明信片
+    设计原则：保持原始背景完整，仅添加人物和底部祝语
     返回: (file_key, download_url)
     """
     logger.info(f"Creating postcard for {name}, gender={gender}, hobby={hobby}")
     
-    # 1. 加载或生成背景图
-    if os.path.exists(BACKGROUND_PATH):
-        bg_img = Image.open(BACKGROUND_PATH).convert("RGBA")
+    # 1. 加载背景图
+    loaded_bg = False
+    bg_path = BACKGROUND_PATH
+    if not os.path.exists(bg_path):
+        # 尝试其他候选路径
+        candidates = [
+            "/opt/bytefaas/assets/scnu_postcard_bg.png",
+            os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "scnu_postcard_bg.png")),
+        ]
+        for p in candidates:
+            if os.path.exists(p):
+                bg_path = p
+                loaded_bg = True
+                break
+        if not loaded_bg:
+            # 所有路径都找不到，生成一个
+            bg_img = generate_background_image(ctx)
     else:
-        # 如果背景图不存在，生成一个华师风格的背景
-        bg_img = generate_background_image(ctx)
+        bg_img = Image.open(bg_path).convert("RGBA")
     
-    # 确保背景图尺寸合适
     bg_w, bg_h = bg_img.size
     logger.info(f"Background size: {bg_w}x{bg_h}")
     
-    # 2. 生成人物形象
+    # 2. 生成人物形象（透明背景）
     character_img = generate_character_image(name, gender, hobby, reference_image_url, ctx)
     character_img = remove_white_background(character_img)
     
-    # 3. 调整人物大小并放置到中间偏右位置
-    # 人物区域：中间到右边，约占背景宽度的50%，高度70%
-    char_max_w = int(bg_w * 0.45)
-    char_max_h = int(bg_h * 0.65)
+    # 3. 调整人物大小 - 不要太大，占画面右下方约35%宽度，避免遮挡太多背景
+    char_max_w = int(bg_w * 0.38)
+    char_max_h = int(bg_h * 0.60)
     
     char_w, char_h = character_img.size
     scale = min(char_max_w / char_w, char_max_h / char_h)
@@ -253,100 +266,93 @@ def create_postcard(
     new_char_h = int(char_h * scale)
     character_img = character_img.resize((new_char_w, new_char_h), Image.Resampling.LANCZOS)
     
-    # 人物位置：水平方向在右侧55%位置开始，垂直方向在25%位置
-    char_x = int(bg_w * 0.52)
-    char_y = int(bg_h * 0.20)
+    # 人物位置：放在画面右下角区域，垂直方向靠下，水平靠右
+    # 给底部祝语留出空间
+    char_x = int(bg_w * 0.58)
+    char_y = int(bg_h * 0.28)
     
-    # 添加轻微阴影效果
+    # 添加柔和阴影
     shadow = Image.new("RGBA", character_img.size, (0, 0, 0, 0))
     shadow.paste(character_img, (0, 0), character_img)
-    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=8))
-    
-    # 将阴影颜色改为黑色半透明
-    shadow = shadow.convert("RGBA")
+    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=10))
     shadow_pixels_list = list(shadow.getdata())
     new_shadow_pixels = []
     for px in shadow_pixels_list:
-        new_alpha = min(px[3], 70)
+        new_alpha = int(min(px[3], 50) * 0.6)
         new_shadow_pixels.append((0, 0, 0, new_alpha))
     shadow.putdata(new_shadow_pixels)
     
-    # 先绘制阴影，再绘制人物
+    # 合成阴影
     shadow_layer = Image.new("RGBA", bg_img.size, (0, 0, 0, 0))
-    shadow_layer.paste(shadow, (char_x + 8, char_y + 8), shadow)
+    shadow_layer.paste(shadow, (char_x + 12, char_y + 12), shadow)
     bg_img = Image.alpha_composite(bg_img, shadow_layer)
     
-    # 粘贴人物
+    # 合成人物
     char_layer = Image.new("RGBA", bg_img.size, (0, 0, 0, 0))
     char_layer.paste(character_img, (char_x, char_y), character_img)
     bg_img = Image.alpha_composite(bg_img, char_layer)
     
-    # 4. 添加名字标签（在人物旁边）
+    # 4. 添加祝语文字在底部（不添加遮挡条，用描边保证可读性）
     draw = ImageDraw.Draw(bg_img)
+    wish_font_size = max(30, int(bg_w / 42))
     
-    # 名字区域 - 左下方
-    name_font_size = max(36, int(bg_w / 35))
-    wish_font_size = max(28, int(bg_w / 45))
-    
-    # 添加半透明装饰条放名字和祝语
-    # 底部区域放祝语
-    bottom_bar_h = int(bg_h * 0.18)
-    bottom_bar = Image.new("RGBA", (bg_w, bottom_bar_h), (100, 149, 237, 160))  # 华师蓝
-    bg_img.paste(bottom_bar, (0, bg_h - bottom_bar_h), bottom_bar)
-    
-    # 左侧信息区域 - 名字
-    info_x = int(bg_w * 0.08)
-    info_y = int(bg_h * 0.35)
-    
-    # 名字背景装饰
-    name_text = f"姓名：{name}"
     if FONT_PATH:
-        name_font = ImageFont.truetype(FONT_PATH, name_font_size)
+        wish_font = ImageFont.truetype(FONT_PATH, wish_font_size)
     else:
-        name_font = ImageFont.load_default()
+        wish_font = ImageFont.load_default()
     
-    # 绘制名字
-    draw.text((info_x, info_y), name_text, font=name_font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 51, 102, 255))
+    # 祝语放在底部中央，自动换行
+    wish_max_width = int(bg_w * 0.80)
+    # 计算文字位置，底部留边距
+    bottom_margin = int(bg_h * 0.06)
     
-    # 爱好
-    hobby_text = f"爱好：{hobby}"
-    if FONT_PATH:
-        hobby_font = ImageFont.truetype(FONT_PATH, int(name_font_size * 0.7))
-    else:
-        hobby_font = ImageFont.load_default()
-    draw.text((info_x, info_y + name_font_size + 20), hobby_text, font=hobby_font, fill=(255, 255, 255, 240), stroke_width=1, stroke_fill=(0, 51, 102, 200))
+    # 手动换行
+    lines = []
+    current_line = ""
+    for char in wish:
+        test_line = current_line + char
+        bbox = draw.textbbox((0, 0), test_line, font=wish_font)
+        if bbox[2] - bbox[0] > wish_max_width and current_line:
+            lines.append(current_line)
+            current_line = char
+        else:
+            current_line = test_line
+    if current_line:
+        lines.append(current_line)
     
-    # 底部祝语 - 居中
-    wish_max_width = int(bg_w * 0.85)
-    wish_y = bg_h - bottom_bar_h + 25
-    add_text_to_image(
-        bg_img,
-        draw,
-        f" {wish}",
-        (int(bg_w * 0.075), wish_y),
-        wish_font_size,
-        fill=(255, 255, 255, 255),
-        max_width=wish_max_width,
-        font_path=FONT_PATH
-    )
+    line_height = wish_font_size + 8
+    total_text_height = len(lines) * line_height
+    start_y = bg_h - bottom_margin - total_text_height
     
-    # 5. 添加华师logo文字（左上角已有，这里添加小水印）
-    small_font_size = max(16, int(bg_w / 80))
+    # 绘制带描边的文字，无需背景条
+    for i, line in enumerate(lines):
+        bbox = draw.textbbox((0, 0), line, font=wish_font)
+        text_width = bbox[2] - bbox[0]
+        x = (bg_w - text_width) // 2
+        y = start_y + i * line_height
+        # 多层描边保证在各种背景上都清晰
+        for dx in [-2, -1, 0, 1, 2]:
+            for dy in [-2, -1, 0, 1, 2]:
+                if dx != 0 or dy != 0:
+                    draw.text((x + dx, y + dy), line, font=wish_font, fill=(20, 40, 80, 220))
+        # 主文字
+        draw.text((x, y), line, font=wish_font, fill=(255, 255, 255, 250))
+    
+    # 右下角添加小字水印
+    small_font_size = max(14, int(bg_w / 90))
     if FONT_PATH:
         small_font = ImageFont.truetype(FONT_PATH, small_font_size)
-    else:
-        small_font = ImageFont.load_default()
-    draw.text(
-        (bg_w - 250, bg_h - 40),
-        "华南师范大学 · 人工智能学院",
-        font=small_font,
-        fill=(255, 255, 255, 180)
-    )
+        draw.text(
+            (bg_w - 280, bg_h - 25),
+            "华南师范大学 · 人工智能学院",
+            font=small_font,
+            fill=(255, 255, 255, 160)
+        )
     
     # 转换为RGB保存
     final_img = bg_img.convert("RGB")
     
-    # 6. 上传到对象存储
+    # 5. 上传到对象存储
     import time
     filename = f"scnu_postcard_{name}_{int(time.time())}.png"
     file_key, url = upload_image_to_storage(final_img, filename)
@@ -360,16 +366,19 @@ def generate_background_image(ctx=None) -> Image.Image:
     client = ImageGenerationClient(ctx=ctx or new_context(method="generate_bg"))
     
     prompt = (
-        "A beautiful postcard background of South China Normal University campus. "
-        "Scene: Academic building (学术厅) surrounded by pink kapok flowers (异木棉) blooming on trees, "
-        "blue sky with white clouds, bright sunny day, warm campus atmosphere. "
-        "Style: photo-realistic, vibrant colors, dreamy soft light, bokeh effects, light blue and white gradient overlay, "
-        "sparkling light effects. "
-        "Top left corner has text area reserved for university logo and name. "
-        "Composition: oval frame in middle showing the campus scene, bottom area is light blue gradient for text. "
-        "University name '华南师范大学 人工智能学院' in calligraphy style at top. "
-        "Decorative elements: small yellow and blue dots at top left, stars and light particles. "
-        "High quality, postcard design, 16:9 or similar ratio."
+        "South China Normal University campus postcard background photography. "
+        "Beautiful academic hall building (学术厅) in light gray/white color, "
+        "pink kapok flowers (异木棉/美丽异木棉) blooming on tree branches in foreground, "
+        "vibrant green leaves, bright blue sky with soft white clouds, "
+        "sunny day warm golden sunlight, dreamy bokeh light effects, "
+        "oval-shaped vignette frame in center showing the campus scene, "
+        "soft light blue and white gradient at bottom area for text, "
+        "small twinkling star light particles, "
+        "At top left: university logo placeholder area and Chinese text '华南师范大学 人工智能学院' in elegant dark blue calligraphy style, "
+        "small decorative yellow and blue dots near the text. "
+        "The right side and bottom should have clear space for placing character and text. "
+        "High quality professional photography, postcard composition, warm youthful campus atmosphere, "
+        "clean composition, not too cluttered, 3:2 or 16:10 aspect ratio."
     )
     
     response = client.generate(
