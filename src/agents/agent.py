@@ -48,7 +48,8 @@ def build_agent(ctx=None):
 
     # 导入工具
     from tools.postcard_tool import generate_postcard
-    tools = [generate_postcard]
+    from tools.digital_id_tool import create_digital_id
+    tools = [generate_postcard, create_digital_id]
 
     return create_agent(
         model=llm,
