@@ -1,9 +1,9 @@
 import os
 import io
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import requests
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 from coze_coding_dev_sdk import ImageGenerationClient
 from coze_coding_dev_sdk.s3 import S3SyncStorage
 from coze_coding_utils.runtime_ctx.context import new_context
@@ -20,7 +20,7 @@ storage = S3SyncStorage(
 
 
 def find_font(size: int) -> ImageFont.FreeTypeFont:
-    """查找可用字体"""
+    """查找可用中文字体"""
     font_paths = [
         "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
@@ -32,22 +32,52 @@ def find_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
-def draw_text_with_glow(
+def find_bold_font(size: int) -> ImageFont.FreeTypeFont:
+    """查找可用加粗字体"""
+    font_paths = [
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+    ]
+    for p in font_paths:
+        if os.path.exists(p):
+            return ImageFont.truetype(p, size)
+    return find_font(size)
+
+
+def draw_text_glow(
     draw: ImageDraw.ImageDraw,
     pos: Tuple[int, int],
     text: str,
     font: ImageFont.FreeTypeFont,
     fill: Tuple[int, int, int, int] = (255, 255, 255, 255),
-    glow_color: Tuple[int, int, int, int] = (0, 255, 255, 120),
-    glow_radius: int = 3
+    glow_color: Tuple[int, int, int, int] = (0, 255, 255, 100),
+    glow_radius: int = 2
 ):
-    """绘制带发光效果的文字"""
+    """绘制发光文字"""
     x, y = pos
     for dx in range(-glow_radius, glow_radius + 1):
         for dy in range(-glow_radius, glow_radius + 1):
             if dx != 0 or dy != 0:
                 draw.text((x + dx, y + dy), text, font=font, fill=glow_color)
     draw.text(pos, text, font=font, fill=fill)
+
+
+def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> List[str]:
+    """英文自动换行"""
+    words = text.split()
+    lines = []
+    current = ""
+    for word in words:
+        test = current + (" " if current else "") + word
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] > max_width and current:
+            lines.append(current)
+            current = word
+        else:
+            current = test
+    if current:
+        lines.append(current)
+    return lines
 
 
 def generate_digital_id_card(
@@ -59,32 +89,35 @@ def generate_digital_id_card(
     ctx=None
 ) -> Tuple[str, str]:
     """
-    生成华师2026新生数字身份卡
-    布局严格遵循：左侧头像(40%) + 右侧信息(60%) + 底部寄语
-    返回: (file_key, download_url)
+    严格按照ROLE规范生成华师2026新生数字身份卡
+    布局：HEADER(10%) + MAIN(60%)(左Avatar40%+右Information60%) + MESSAGE(30%)
+    三级视觉层级：NAME最大 → STUDENT ID/MAJOR中等 → SCHOOL/COLLEGE较小
     """
     ctx = ctx or new_context(method="generate_digital_id")
     client = ImageGenerationClient(ctx=ctx)
     
-    logger.info(f"Generating digital ID card for {name_pinyin}, ID: {student_id}, Major: {major_en}")
+    logger.info(f"Generating digital ID card: {name_pinyin}, ID: {student_id}")
     
-    # ========== 1. 生成基础模板（包含头像和整体设计） ==========
+    # ========== 1. 生成基础模板（包含完整卡片设计和头像） ==========
     if reference_image_url:
-        # 有用户上传照片，使用图生图生成数字人头像
+        # 使用用户上传照片做参考生成数字人
         prompt = (
-            "16:9 horizontal futuristic holographic digital student ID card design, NO TEXT. "
-            "LEFT 40%: large circular glowing avatar frame with neon cyan and magenta rings, "
-            "inside the circle: convert the reference photo person into a refined 3D digital avatar, "
-            "preserve original facial features, face shape, hairstyle, skin tone and personal气质, "
-            "slight anime style, premium digital human look, soft cinematic lighting, youthful, natural, "
-            "front-facing bust portrait centered in circle, holographic scan lines, digital particles around. "
-            "RIGHT 60%: empty clean transparent glass morphism panel ready for information, subtle HUD grid lines. "
-            "Floating glass card overall with neon cyan (#00ffff) and magenta (#ff00ff) glowing borders, "
-            "digital circuit patterns, futuristic sci-fi UI frame. "
-            "Background: dark futuristic university campus at night, starry sky, futuristic building silhouettes, "
-            "neon bokeh, digital particles, volumetric light, depth of field blur. "
-            "Style: premium cinematic, glass morphism, cyberpunk but clean elegant, "
-            "8k ultra detailed, NO TEXT NO WORDS anywhere."
+            "16:9 horizontal futuristic holographic digital student ID card template, NO TEXT AT ALL. "
+            "THREE SECTION LAYOUT: "
+            "TOP 10%: thin header area with subtle glowing border decoration, empty for title. "
+            "MIDDLE 60% split into LEFT 40% and RIGHT 60%: "
+            "LEFT 40%: large circular holographic avatar frame with dual neon cyan and magenta glowing rings, "
+            "inside convert reference photo person into premium 3D digital avatar, PRESERVE original facial features, "
+            "face shape, hairstyle, skin tone and personal气质, recognizable as the same person, "
+            "slight anime style, soft cinematic lighting, youthful, front-facing bust portrait centered, "
+            "subtle HUD scan lines, digital particles around circle, NOT TOO MUCH DECORATION. "
+            "RIGHT 60%: empty clean transparent glass surface ready for text information, subtle grid lines. "
+            "BOTTOM 30%: separate semi-transparent glass panel area for message, subtle neon divider line above. "
+            "Overall card: horizontal floating transparent glass morphism card, holographic neon borders in cyan (#00ffff) and magenta (#ff00ff), "
+            "digital circuit patterns, sci-fi UI frame, premium elegant, NOT CHEAP RGB GAMING STYLE. "
+            "Background: dark futuristic university campus night, low contrast, starry sky, building silhouettes, "
+            "subtle neon bokeh, holographic particles, depth of field blur, atmosphere only, does NOT distract from card. "
+            "Style: premium cinematic glass morphism, clean elegant cyberpunk, 8k ultra detailed, ABSOLUTELY NO TEXT."
         )
         response = client.generate(
             prompt=prompt,
@@ -94,19 +127,23 @@ def generate_digital_id_card(
             model="doubao-seedream-5-0-260128"
         )
     else:
-        # 无参考照片，生成标准数字人模板
+        # 无参考照片，生成标准模板
         prompt = (
-            "16:9 horizontal futuristic holographic digital student ID card design, NO TEXT. "
-            "LEFT 40%: large circular glowing avatar frame with dual neon cyan and magenta rings, "
-            "inside: beautiful 18-year-old asian university freshman digital avatar, friendly gentle expression, "
-            "refined 3D digital character, slight anime style, premium digital human, soft cinematic lighting, "
-            "youthful, front-facing bust portrait centered, holographic particles and scan lines around circle. "
-            "RIGHT 60%: empty clean glass surface for information display. "
-            "Overall: horizontal floating glass card, transparent glass morphism, holographic projection effect, "
-            "neon glowing borders in cyan blue and magenta pink, digital circuit patterns, sci-fi UI frame. "
-            "Background: dark futuristic campus night, starry sky, building silhouettes, neon bokeh, particles, "
-            "volumetric light, bokeh blur, dark edges. "
-            "Style: premium cinematic, glass morphism, clean elegant, 8k, NO TEXT."
+            "16:9 horizontal futuristic holographic digital student ID card template, NO TEXT AT ALL. "
+            "THREE SECTION LAYOUT: "
+            "TOP 10%: thin header area with subtle glowing border decoration, empty for title. "
+            "MIDDLE 60% split into LEFT 40% and RIGHT 60%: "
+            "LEFT 40%: large circular holographic avatar frame with dual neon cyan and magenta glowing rings, "
+            "inside: beautiful 18-year-old asian university freshman 3D digital avatar, friendly gentle smile, "
+            "refined premium digital human, slight anime style, soft cinematic lighting, youthful natural, "
+            "front-facing bust portrait centered in circle, subtle HUD particles around. "
+            "RIGHT 60%: empty clean transparent glass surface for information. "
+            "BOTTOM 30%: separate semi-transparent glass panel area for personal message, subtle neon divider line. "
+            "Overall: horizontal floating glass morphism card, holographic projection, neon cyan and magenta borders, "
+            "digital circuit patterns, premium elegant sci-fi frame. "
+            "Background: dark futuristic campus night, low contrast, starry sky, building silhouettes, neon bokeh, particles, "
+            "bokeh blur, dark vignette edges, ATMOSPHERE ONLY. "
+            "Style: premium cinematic glass morphism, clean elegant, 8k, NO TEXT."
         )
         response = client.generate(
             prompt=prompt,
@@ -118,13 +155,12 @@ def generate_digital_id_card(
     if not response.success:
         raise Exception(f"Image generation failed: {response.error_messages}")
     
-    # 下载基础图
+    # 下载并裁剪为16:9
     img_url = response.image_urls[0]
     img_resp = requests.get(img_url, timeout=60)
     img_resp.raise_for_status()
     img = Image.open(io.BytesIO(img_resp.content)).convert("RGBA")
     
-    # 裁剪为16:9横版
     w, h = img.size
     target_ratio = 16 / 9
     current_ratio = w / h
@@ -140,89 +176,138 @@ def generate_digital_id_card(
     w, h = img.size
     draw = ImageDraw.Draw(img)
     
-    # ========== 2. 添加文字信息（电子名片内部区域） ==========
-    right_x = int(w * 0.42)
-    margin_right = int(w * 0.05)
+    # ========== 严格按照ROLE规范的三级网格布局 ==========
+    # 边距（卡片内安全区域）
+    pad = int(w * 0.035)
+    left_info_x = int(w * 0.42)  # 信息区左边界
+    right_x = w - pad
     
-    # 字体大小（整体调小，确保在名片范围内）
-    label_size = int(h * 0.026)
-    value_name_size = int(h * 0.060)
-    value_size = int(h * 0.036)
-    decor_size = int(h * 0.018)
+    # 分区高度：HEADER 10% | MAIN 60% | MESSAGE 30%
+    header_h = int(h * 0.10)
+    main_h = int(h * 0.60)
+    msg_h = int(h * 0.30)
     
-    label_font = find_font(label_size)
-    name_font = find_font(value_name_size)
-    value_font = find_font(value_size)
-    decor_font = find_font(decor_size)
-    msg_title_font = find_font(int(h * 0.024))
-    msg_font = find_font(int(h * 0.028))
+    header_y_start = int(h * 0.02)
+    main_y_start = header_h + int(h * 0.01)
+    msg_y_start = header_h + main_h + int(h * 0.01)
     
-    # 顶部装饰文字（名片内部右上角）
-    draw.text((w - int(w*0.25), int(h*0.10)), "SYSTEM ONLINE · 2026", 
-              font=decor_font, fill=(0, 255, 255, 150))
+    # ---------- HEADER 区域（顶部10%）----------
+    header_label_font = find_font(int(h * 0.035))
+    header_year_font = find_bold_font(int(h * 0.040))
+    decor_font = find_font(int(h * 0.016))
     
-    # 右侧信息列表（上移，紧凑排布，放在电子名片玻璃区域内）
-    info_start_y = int(h * 0.15)
-    line_gap = int(h * 0.078)
+    # 左侧：2026 NEW STUDENT
+    draw_text_glow(
+        draw, (pad, header_y_start + int(h*0.02)),
+        "2026  ·  NEW STUDENT  ·  DIGITAL ID",
+        header_label_font,
+        fill=(255, 255, 255, 230),
+        glow_color=(0, 255, 255, 80),
+        glow_radius=2
+    )
+    # 右侧装饰
+    draw.text((right_x - int(w*0.18), header_y_start + int(h*0.03)), 
+              "◉ SYSTEM ONLINE  ▣ INITIALIZED", font=decor_font, fill=(0, 255, 255, 130))
     
-    info_items = [
-        ("NAME", name_pinyin, True),
-        ("STUDENT ID", student_id, False),
-        ("MAJOR", major_en, False),
-        ("SCHOOL", "South China Normal University", False),
-        ("COLLEGE", "School of Artificial Intelligence", False),
-    ]
+    # Header底部细分割线
+    draw.line([(pad, header_h - 2), (right_x, header_h - 2)], 
+              fill=(0, 255, 255, 80), width=1)
     
-    for i, (label, value, is_name) in enumerate(info_items):
-        y = info_start_y + i * line_gap
-        # 标签（青色小字）
-        draw.text((right_x, y), label, font=label_font, fill=(0, 255, 255, 210))
-        # 值（白色发光字，NAME最醒目但大小合适）
-        f = name_font if is_name else value_font
-        glow_r = 3 if is_name else 1
-        glow_c = (255, 0, 255, 70) if is_name else (0, 255, 255, 60)
-        draw_text_with_glow(
-            draw, (right_x, y + int(h*0.028)), value, f,
-            fill=(255, 255, 255, 250),
-            glow_color=glow_c,
-            glow_radius=glow_r
-        )
+    # ---------- 右侧 INFORMATION 区域（MAIN区右侧60%，三级视觉层级）----------
+    info_y = main_y_start + int(h * 0.03)
     
-    # 分割线（信息和寄语之间）
-    line_y = info_start_y + len(info_items) * line_gap - int(h*0.015)
-    draw.line([(right_x, line_y), (w - margin_right, line_y)], fill=(0, 255, 255, 120), width=1)
+    # ===== LEVEL 1: NAME（最大最醒目，最多1行）=====
+    label_l1_font = find_font(int(h * 0.022))  # 标签小
+    value_l1_font = find_bold_font(int(h * 0.068))  # 姓名最大
     
-    # ========== 3. 底部寄语区域（紧凑，控制长度在15字内单行展示） ==========
-    msg_y = line_y + int(h * 0.02)
-    draw.text((right_x, msg_y), "MESSAGE TO MYSELF", font=msg_title_font, fill=(255, 0, 255, 210))
+    draw.text((left_info_x, info_y), "NAME", font=label_l1_font, fill=(0, 255, 255, 200))
+    info_y += int(h * 0.028)
+    draw_text_glow(
+        draw, (left_info_x, info_y), name_pinyin, value_l1_font,
+        fill=(255, 255, 255, 250),
+        glow_color=(255, 0, 255, 70),
+        glow_radius=3
+    )
+    info_y += int(h * 0.075)
     
-    # 自动换行处理英文寄语
-    words = message_en.split()
-    lines = []
-    current_line = ""
-    max_width = w - right_x - margin_right
-    for word in words:
-        test = current_line + (" " if current_line else "") + word
-        bbox = draw.textbbox((0, 0), test, font=msg_font)
-        if bbox[2] - bbox[0] > max_width and current_line:
-            lines.append(current_line)
-            current_line = word
-        else:
-            current_line = test
-    if current_line:
-        lines.append(current_line)
+    # 分割线（NAME之后）
+    draw.line([(left_info_x, info_y), (right_x, info_y)], 
+              fill=(0, 255, 255, 100), width=1)
+    info_y += int(h * 0.020)
     
-    msg_text_y = msg_y + int(h * 0.032)
-    line_height = int(h * 0.034)
-    for i, line in enumerate(lines[:2]):  # 最多2行，寄语控制在15字内基本单行
-        draw.text((right_x, msg_text_y + i * line_height), line, font=msg_font, fill=(255, 240, 255, 230))
+    # ===== LEVEL 2: STUDENT ID + MAJOR（中等字号）=====
+    label_l2_font = find_font(int(h * 0.020))
+    value_l2_font = find_bold_font(int(h * 0.040))
     
-    # 底部装饰文字（名片内底部）
-    scan_y = h - int(h*0.07)
-    draw.text((right_x, scan_y), "◉ SCAN  ▣ ID VERIFIED  ◈ NEW JOURNEY", 
-              font=decor_font, fill=(0, 255, 255, 130))
+    # STUDENT ID
+    draw.text((left_info_x, info_y), "STUDENT ID", font=label_l2_font, fill=(0, 255, 255, 200))
+    info_y += int(h * 0.025)
+    draw_text_glow(
+        draw, (left_info_x, info_y), student_id, value_l2_font,
+        fill=(255, 255, 255, 240),
+        glow_color=(0, 255, 255, 50),
+        glow_radius=1
+    )
+    info_y += int(h * 0.050)
     
-    # ========== 4. 保存并上传 ==========
+    # MAJOR（最多2行）
+    draw.text((left_info_x, info_y), "MAJOR", font=label_l2_font, fill=(0, 255, 255, 200))
+    info_y += int(h * 0.025)
+    major_lines = wrap_text(draw, major_en, value_l2_font, right_x - left_info_x)
+    for i, line in enumerate(major_lines[:2]):
+        draw.text((left_info_x, info_y + i * int(h*0.043)), line, font=value_l2_font, fill=(255, 255, 255, 240))
+    info_y += min(len(major_lines), 2) * int(h * 0.043) + int(h * 0.018)
+    
+    # 分割线（LEVEL 2之后）
+    draw.line([(left_info_x, info_y), (right_x, info_y)], 
+              fill=(0, 255, 255, 100), width=1)
+    info_y += int(h * 0.018)
+    
+    # ===== LEVEL 3: SCHOOL + COLLEGE（较小字号，机构信息）=====
+    label_l3_font = find_font(int(h * 0.018))
+    value_l3_font = find_font(int(h * 0.030))
+    
+    # SCHOOL
+    draw.text((left_info_x, info_y), "SCHOOL", font=label_l3_font, fill=(0, 255, 255, 180))
+    info_y += int(h * 0.022)
+    school_lines = wrap_text(draw, "South China Normal University", value_l3_font, right_x - left_info_x)
+    for i, line in enumerate(school_lines[:2]):
+        draw.text((left_info_x, info_y + i * int(h*0.033)), line, font=value_l3_font, fill=(220, 240, 255, 210))
+    info_y += min(len(school_lines), 2) * int(h * 0.033) + int(h * 0.012)
+    
+    # COLLEGE
+    draw.text((left_info_x, info_y), "COLLEGE", font=label_l3_font, fill=(255, 0, 255, 180))
+    info_y += int(h * 0.022)
+    college_lines = wrap_text(draw, "School of Artificial Intelligence", value_l3_font, right_x - left_info_x)
+    for i, line in enumerate(college_lines[:2]):
+        draw.text((left_info_x, info_y + i * int(h*0.033)), line, font=value_l3_font, fill=(255, 220, 255, 210))
+    
+    # ---------- 底部 MESSAGE 区域（占30%高度，独立玻璃面板）----------
+    # 区域顶部霓虹分割线
+    draw.line([(pad, msg_y_start - 2), (right_x, msg_y_start - 2)], 
+              fill=(255, 0, 255, 100), width=2)
+    
+    msg_title_font = find_bold_font(int(h * 0.024))
+    msg_font = find_font(int(h * 0.030))
+    
+    msg_title_y = msg_y_start + int(h * 0.025)
+    draw.text((pad + int(w*0.02), msg_title_y), "MESSAGE TO MYSELF", 
+              font=msg_title_font, fill=(255, 0, 255, 200))
+    
+    # 寄语文字（左对齐，最多4行，保持足够留白）
+    msg_text_y = msg_title_y + int(h * 0.038)
+    max_msg_width = w - pad*2 - int(w*0.04)
+    msg_lines = wrap_text(draw, message_en, msg_font, max_msg_width)
+    line_height = int(h * 0.038)
+    for i, line in enumerate(msg_lines[:4]):
+        draw.text((pad + int(w*0.02), msg_text_y + i * line_height), 
+                  line, font=msg_font, fill=(255, 245, 255, 230))
+    
+    # 左下角/右下角装饰
+    draw.text((pad, h - int(h*0.045)), "◈ FUTURE · CAMPUS · 2026 ◈", 
+              font=decor_font, fill=(0, 255, 255, 120))
+    
+    # ========== 保存并上传 ==========
     final_img = img.convert("RGB")
     buf = io.BytesIO()
     final_img.save(buf, format="PNG", quality=95)
@@ -237,6 +322,6 @@ def generate_digital_id_card(
     )
     
     download_url = storage.generate_presigned_url(key=file_key, expire_time=86400 * 30)
-    logger.info(f"Digital ID card generated successfully: {download_url}")
+    logger.info(f"Digital ID card generated: {download_url}")
     
     return file_key, download_url
