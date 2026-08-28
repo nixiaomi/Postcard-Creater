@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>华师明信片制作 - 华南师范大学人工智能学院</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            padding: 20px;
+        }
+        
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .header .logo-area {
+            margin-bottom: 15px;
+        }
+        
+        .header .logo-text {
+            font-size: 1.3em;
+            font-weight: 500;
+        }
+        
+        .main-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .form-section {
+            padding: 40px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 1em;
+        }
+        
+        .form-group label .required {
+            color: #e74c3c;
+            margin-left: 3px;
+        }
+        
+        .form-group input[type="text"],
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            font-family: inherit;
+            transition: all 0.3s;
+        }
+        
+        .form-group input[type="text"]:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .gender-options {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .gender-option {
+            flex: 1;
+            position: relative;
+        }
+        
+        .gender-option input[type="radio"] {
+            display: none;
+        }
+        
+        .gender-option label {
+            display: block;
+            padding: 12px;
+            text-align: center;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 0;
+        }
+        
+        .gender-option input[type="radio"]:checked + label {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .upload-area.has-image {
+            border-style: solid;
+            border-color: #667eea;
+            padding: 10px;
+        }
+        
+        .upload-area input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+        
+        .upload-text {
+            color: #666;
+        }
+        
+        .upload-hint {
+            font-size: 0.85em;
+            color: #999;
+            margin-top: 5px;
+        }
+        
+        #preview-image {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        #preview-image.show {
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .generate-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.15em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+        
+        .generate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .generate-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 30px;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .result-section {
+            display: none;
+            padding: 30px 40px 40px;
+            background: #f8f9ff;
+            border-top: 1px solid #eee;
+        }
+        
+        .result-section.show {
+            display: block;
+        }
+        
+        .result-title {
+            text-align: center;
+            font-size: 1.3em;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .result-image-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .result-image {
+            max-width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .download-btn {
+            display: inline-block;
+            padding: 14px 40px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 1.05em;
+            transition: all 0.3s;
+            margin: 10px;
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(17, 153, 142, 0.4);
+        }
+        
+        .new-btn {
+            display: inline-block;
+            padding: 14px 40px;
+            background: #f0f0f0;
+            color: #333;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 1.05em;
+            transition: all 0.3s;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+        }
+        
+        .new-btn:hover {
+            background: #e0e0e0;
+        }
+        
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .priority-note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #856404;
+        }
+        
+        .char-count {
+            text-align: right;
+            font-size: 0.85em;
+            color: #999;
+            margin-top: 5px;
+        }
+        
+        @media (max-width: 600px) {
+            .form-section {
+                padding: 25px 20px;
+            }
+            .header h1 {
+                font-size: 1.6em;
+            }
+            .gender-options {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-area">
+                <div class="logo-text">🎓 华南师范大学 · 人工智能学院</div>
+            </div>
+            <h1>✨ 华师专属明信片制作</h1>
+            <p class="subtitle">输入你的信息，AI为你生成独一无二的开学纪念明信片</p>
+        </div>
+        
+        <div class="main-card">
+            <div class="form-section" id="form-section">
+                <div class="error-message" id="error-msg"></div>
+                
+                <div class="priority-note">
+                    💡 <strong>提示：</strong>上传你的照片后，AI会以你的照片为参考，生成独特画风的人物形象在明信片上！
+                </div>
+                
+                <div class="form-group">
+                    <label>你的名字 <span class="required">*</span></label>
+                    <input type="text" id="name" placeholder="请输入你的名字" maxlength="20">
+                </div>
+                
+                <div class="form-group">
+                    <label>性别 <span class="required">*</span></label>
+                    <div class="gender-options">
+                        <div class="gender-option">
+                            <input type="radio" id="gender-male" name="gender" value="male">
+                            <label for="gender-male">👨 男生</label>
+                        </div>
+                        <div class="gender-option">
+                            <input type="radio" id="gender-female" name="gender" value="female" checked>
+                            <label for="gender-female">👩 女生</label>
+                        </div>
+                        <div class="gender-option">
+                            <input type="radio" id="gender-other" name="gender" value="other">
+                            <label for="gender-other">🎨 其他</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>你的爱好 <span class="required">*</span></label>
+                    <input type="text" id="hobby" placeholder="例如：阅读、打篮球、弹吉他、摄影..." maxlength="50">
+                </div>
+                
+                <div class="form-group">
+                    <label>开学祝语 <span class="required">*</span></label>
+                    <textarea id="wish" placeholder="写下你对新学期的祝福和期望吧..." maxlength="100"></textarea>
+                    <div class="char-count"><span id="wish-count">0</span>/100</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>上传你的照片（可选）</label>
+                    <div class="upload-area" id="upload-area">
+                        <input type="file" id="photo" accept="image/*">
+                        <div id="upload-placeholder">
+                            <div class="upload-icon">📷</div>
+                            <div class="upload-text">点击或拖拽上传你的照片</div>
+                            <div class="upload-hint">支持 JPG、PNG 格式，最大 10MB</div>
+                        </div>
+                        <img id="preview-image" src="" alt="预览">
+                    </div>
+                </div>
+                
+                <button class="generate-btn" id="generate-btn" onclick="generatePostcard()">
+                    🎨 生成我的专属明信片
+                </button>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>正在为你生成专属明信片，请稍候...</p>
+                    <p style="color: #999; font-size: 0.9em; margin-top: 10px;">AI正在创作中，大约需要15-30秒</p>
+                </div>
+            </div>
+            
+            <div class="result-section" id="result-section">
+                <div class="result-title">🎉 你的专属明信片生成成功！</div>
+                <div class="result-image-container">
+                    <img class="result-image" id="result-image" src="" alt="生成的明信片">
+                </div>
+                <div style="text-align: center;">
+                    <a class="download-btn" id="download-btn" href="" download="华师明信片.png">
+                        💾 下载明信片
+                    </a>
+                    <button class="new-btn" onclick="resetForm()">
+                        🔄 制作新的明信片
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; color: white; margin-top: 20px; opacity: 0.8; font-size: 0.9em;">
+            Made with ❤️ for 华师学子 | 华南师范大学人工智能学院
+        </div>
+    </div>
+    
+    <script>
+        let uploadedPhotoUrl = null;
+        
+        // 字数统计
+        document.getElementById('wish').addEventListener('input', function() {
+            document.getElementById('wish-count').textContent = this.value.length;
+        });
+        
+        // 照片上传预览
+        document.getElementById('photo').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            if (file.size > 10 * 1024 * 1024) {
+                showError('文件大小不能超过10MB');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('/api/upload-photo', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    uploadedPhotoUrl = result.url;
+                    
+                    // 显示预览
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        document.getElementById('preview-image').src = e.target.result;
+                        document.getElementById('preview-image').classList.add('show');
+                        document.getElementById('upload-placeholder').style.display = 'none';
+                        document.getElementById('upload-area').classList.add('has-image');
+                    };
+                    reader.readAsDataURL(file);
+                    
+                    hideError();
+                } else {
+                    showError(result.detail || '上传失败');
+                }
+            } catch (err) {
+                showError('上传失败，请重试');
+            }
+        });
+        
+        async function generatePostcard() {
+            const name = document.getElementById('name').value.trim();
+            const gender = document.querySelector('input[name="gender"]:checked')?.value;
+            const hobby = document.getElementById('hobby').value.trim();
+            const wish = document.getElementById('wish').value.trim();
+            
+            // 校验
+            if (!name) {
+                showError('请输入你的名字');
+                return;
+            }
+            if (!hobby) {
+                showError('请填写你的爱好');
+                return;
+            }
+            if (!wish) {
+                showError('请写下你的开学祝语');
+                return;
+            }
+            
+            hideError();
+            
+            // 显示loading
+            document.getElementById('generate-btn').disabled = true;
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('result-section').classList.remove('show');
+            
+            try {
+                const formData = new FormData();
+                formData.append('name', name);
+                formData.append('gender', gender);
+                formData.append('hobby', hobby);
+                formData.append('wish', wish);
+                if (uploadedPhotoUrl) {
+                    formData.append('photo_url', uploadedPhotoUrl);
+                }
+                
+                const response = await fetch('/api/generate-postcard', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 显示结果
+                    document.getElementById('result-image').src = result.download_url;
+                    document.getElementById('download-btn').href = result.download_url;
+                    document.getElementById('result-section').classList.add('show');
+                    
+                    // 滚动到结果区域
+                    document.getElementById('result-section').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    showError(result.detail || '生成失败，请重试');
+                }
+            } catch (err) {
+                showError('网络错误，请重试');
+            } finally {
+                document.getElementById('generate-btn').disabled = false;
+                document.getElementById('loading').classList.remove('show');
+            }
+        }
+        
+        function resetForm() {
+            document.getElementById('name').value = '';
+            document.getElementById('hobby').value = '';
+            document.getElementById('wish').value = '';
+            document.getElementById('wish-count').textContent = '0';
+            document.getElementById('photo').value = '';
+            document.getElementById('preview-image').classList.remove('show');
+            document.getElementById('upload-placeholder').style.display = 'block';
+            document.getElementById('upload-area').classList.remove('has-image');
+            document.getElementById('result-section').classList.remove('show');
+            uploadedPhotoUrl = null;
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        function showError(msg) {
+            const el = document.getElementById('error-msg');
+            el.textContent = msg;
+            el.classList.add('show');
+        }
+        
+        function hideError() {
+            document.getElementById('error-msg').classList.remove('show');
+        }
+    </script>
+</body>
+</html>
