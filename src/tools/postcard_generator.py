@@ -19,8 +19,17 @@ storage = S3SyncStorage(
     region="cn-beijing",
 )
 
+# 背景图路径 - 使用可靠的路径定位
+def _get_background_path() -> str:
+    env_path = os.getenv("COZE_WORKSPACE_PATH")
+    if env_path:
+        return os.path.join(env_path, "assets", "scnu_postcard_bg.png")
+    # 相对于当前文件位置: src/tools/postcard_generator.py -> ../../assets
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(current_dir, "..", "..", "assets", "scnu_postcard_bg.png")
+
 # 背景图路径
-BACKGROUND_PATH = os.path.join(os.getenv("COZE_WORKSPACE_PATH", "/workspace/projects"), "assets", "scnu_postcard_bg.png")
+BACKGROUND_PATH = os.path.normpath(_get_background_path())
 
 # 尝试查找中文字体
 def find_chinese_font() -> str:

@@ -287,9 +287,27 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # 集成明信片制作Web应用
+import os
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+# 使用可靠的路径定位
+def get_base_dir() -> Path:
+    # 优先使用环境变量，否则相对于当前文件位置
+    env_path = os.getenv("COZE_WORKSPACE_PATH")
+    if env_path:
+        return Path(env_path)
+    # 当前文件在 src/main.py，向上一级是项目根目录
+    return Path(__file__).resolve().parent.parent
+
+BASE_DIR = get_base_dir()
+templates_dir = BASE_DIR / "templates"
+static_dir = BASE_DIR / "static"
+
+# 确保static目录存在
+static_dir.mkdir(exist_ok=True)
+
 from web_app import app as postcard_app
 
 # 将明信片路由挂载到根路径，现有API保持不变
@@ -297,10 +315,10 @@ from web_app import app as postcard_app
 for route in postcard_app.routes:
     app.routes.append(route)
 
-# 挂载静态文件
-BASE_DIR = Path(__file__).resolve().parent.parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="postcard_static")
+# 重新配置模板和静态文件路径（覆盖web_app中的设置）
+templates = Jinja2Templates(directory=str(templates_dir))
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="postcard_static")
 
 # OpenAI 兼容接口处理器
 openai_handler = OpenAIChatHandler(service)

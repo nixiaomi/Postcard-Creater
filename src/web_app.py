@@ -9,8 +9,14 @@ from fastapi.templating import Jinja2Templates
 from coze_coding_utils.runtime_ctx.context import new_context
 
 # 添加src到路径
-workspace = os.getenv("COZE_WORKSPACE_PATH", "/workspace/projects")
-sys.path.insert(0, os.path.join(workspace, "src"))
+def get_base_dir() -> Path:
+    env_path = os.getenv("COZE_WORKSPACE_PATH")
+    if env_path:
+        return Path(env_path)
+    return Path(__file__).resolve().parent.parent
+
+BASE_DIR = get_base_dir()
+sys.path.insert(0, str(BASE_DIR / "src"))
 
 from tools.postcard_generator import create_postcard
 from tools.file_upload import save_uploaded_file
@@ -24,10 +30,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="华师明信片制作智能体", description="华南师范大学AI明信片生成器")
 
-# 静态文件和模板
-BASE_DIR = Path(__file__).resolve().parent.parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+# 确保静态目录存在
+static_dir = BASE_DIR / "static"
+static_dir.mkdir(exist_ok=True)
+templates_dir = BASE_DIR / "templates"
+
+templates = Jinja2Templates(directory=str(templates_dir))
+# 静态文件由main.py统一挂载，这里不重复mount避免冲突
 
 
 @app.get("/", response_class=HTMLResponse)
