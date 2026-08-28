@@ -286,37 +286,37 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# 集成明信片制作Web应用
+# 集成明信片制作Web应用（可选，若目录存在则挂载）
 import os
 from pathlib import Path
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
-# 使用可靠的路径定位
 def get_base_dir() -> Path:
-    # 优先使用环境变量
     env_path = os.getenv("COZE_WORKSPACE_PATH")
     if env_path:
         return Path(env_path)
-    # 当前文件在 src/main.py，向上一级是项目根目录
-    # 平台部署路径: /opt/bytefaas/src/main.py -> /opt/bytefaas
     return Path(__file__).resolve().parent.parent
 
 BASE_DIR = get_base_dir()
-templates_dir = BASE_DIR / "templates"
-static_dir = BASE_DIR / "static"
 
-from web_app import app as postcard_app
-
-# 将明信片路由挂载到根路径，现有API保持不变
-for route in postcard_app.routes:
-    app.routes.append(route)
-
-# 配置模板路径（目录已随代码部署存在，只读文件系统不能mkdir）
-templates = Jinja2Templates(directory=str(templates_dir))
-# 静态文件挂载
-if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="postcard_static")
+try:
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.templating import Jinja2Templates
+    from web_app import app as postcard_app
+    
+    # 复制明信片app的路由
+    for route in postcard_app.routes:
+        app.routes.append(route)
+    
+    # 静态文件和模板（目录存在才挂载）
+    templates_dir = BASE_DIR / "templates"
+    static_dir = BASE_DIR / "static"
+    if templates_dir.exists():
+        templates = Jinja2Templates(directory=str(templates_dir))
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="postcard_static")
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).warning(f"Web UI not mounted: {e}")
 
 # OpenAI 兼容接口处理器
 openai_handler = OpenAIChatHandler(service)

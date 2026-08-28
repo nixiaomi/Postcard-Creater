@@ -46,10 +46,14 @@ def build_agent(ctx=None):
         default_headers=default_headers(ctx) if ctx else {}
     )
 
+    # 导入工具
+    from tools.postcard_tool import generate_postcard
+    tools = [generate_postcard]
+
     return create_agent(
         model=llm,
         system_prompt=cfg.get("sp"),
-        tools=[],
+        tools=tools,
         checkpointer=get_memory_saver(),
         state_schema=AgentState,
     )
